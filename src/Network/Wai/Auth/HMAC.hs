@@ -26,6 +26,7 @@ import Data.Byteable (toBytes)
 
 import Network.Wai
 import Network.HTTP.Types.Header
+import Network.HTTP.Types.URI (renderQuery)
 
 -- * types
 
@@ -43,7 +44,7 @@ data RequestConfig alg = RequestConfig {
     timestampHeader :: HeaderName,
     signatureHeader :: HeaderName,
     hashAlgorithm :: alg
-}
+} deriving (Eq, Show)
 
 data AuthFailure =
     MissingApiKey ApiKeySpec |
@@ -134,24 +135,22 @@ addHashComponents :: (MonadIO m, HasReqConf alg m, AuthErrorsM m, WriteChunks m,
 addHashComponents = allRead [ 
     addToHash . requestMethod, addSep,
     addTimestampHeader, addSep, 
-    addApiKeyWhenHeader, addSep,
+    ensureApiKeyIsAdded,
     addToHash . rawPathInfo, addSep,
     addToHash . rawPathInfo,
     --todo: proper formatting of query params
-    const $ addToHash "$",
-    addToHash . rawQueryString, addSep,
+    addToHash . renderQuery True . queryString, addSep,
     addBodyToHash
     ]
     where
     addSep = const (addToHash "\n")
     addTimestampHeader = getTimestampHeader >=> addToHash
 
-addApiKeyWhenHeader :: (AuthErrorsM m, HasReqConf alg m, HmacState alg m) => Request -> m ()
-addApiKeyWhenHeader req = Mtl.reader keySpec >>= getKey
+ensureApiKeyIsAdded :: (AuthErrorsM m, HasReqConf alg m, HmacState alg m) => Request -> m ()
+ensureApiKeyIsAdded req =  Mtl.reader keySpec >>= (maybe <$> Mtl.throwError . MissingApiKey <*> actionForSpec <*> flip getApiKey req)
     where
-    throwMissingKey = Mtl.throwError . MissingApiKey . HeaderKey
-    getKey (QueryParamKey _) = return ()
-    getKey (HeaderKey h) = maybe (throwMissingKey h) addToHash (lookup h (requestHeaders req))
+    actionForSpec (QueryParamKey _) _ = return ()
+    actionForSpec (HeaderKey _) (ApiKey k) = addToHash k >> addToHash "\n"
 
 addBodyToHash :: (MonadIO m, HmacState alg m, WriteChunks m) => Request -> m ()
 addBodyToHash req = whileJust_ (getNextChunkForHash req) $ \c -> addToHash c *> Mtl.tell (S.singleton c)
