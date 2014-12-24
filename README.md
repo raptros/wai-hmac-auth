@@ -1,4 +1,4 @@
-wai-hmac-auth [![Build Status](https://travis-ci.org/raptros/wai-hmac-auth.svg?branch=master)](https://travis-ci.org/raptros/wai-hmac-auth)
+wai-hmac-auth [![Build Status](https://travis-ci.org/raptros/wai-hmac-auth.svg?branch=master)](https://travis-ci.org/raptros/wai-hmac-auth) [![Hackage](https://img.shields.io/hackage/v/wai-hmac-auth.svg)](http://hackage.haskell.org/package/wai-hmac-auth)
 =============
 this library provides functions for authenticating HMAC-signed requests in WAI
 apps. in particular, it provides a function for extracting an api key from a
