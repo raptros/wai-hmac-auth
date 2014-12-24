@@ -1,7 +1,7 @@
 name:                wai-hmac-auth
 version:             0.1.0.0
 synopsis:            hmac authentication tools for WAI apps
-description:         hmac authentication tools for WAI apps
+description:         authenticate requests made to your WAI apps using HMAC.
 homepage:            https://github.com/raptros/wai-hmac-auth
 license:             BSD3
 license-file:        LICENSE
