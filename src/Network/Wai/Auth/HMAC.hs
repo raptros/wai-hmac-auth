@@ -1,3 +1,8 @@
+{-|
+Description: HMAC authentication tools
+
+you should only need the contents of the types and tools sections, but all the functions in this module are exported just in case.
+-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 module Network.Wai.Auth.HMAC where
@@ -74,22 +79,6 @@ data AuthFailure =
     HashMismatch
     deriving (Eq, Show)
 
--- ** constrain aliases
-
--- | a constraint alias for functions that need to access request
--- configuration
-type HasReqConf alg m = (HashAlgorithm alg, Mtl.MonadReader (RequestConfig alg) m, Functor m)
-
--- | a constrain alias for functions that can fail
-type AuthErrorsM m = (Mtl.MonadError AuthFailure m)
-
--- | a constraint alias for functions that save chunks of the request body
-type WriteChunks m = (Mtl.MonadWriter (S.Seq BS.ByteString) m)
-
--- | a constrain alias for functions that perform incremental updates to
--- the hash value
-type HmacState alg m = (Functor m, Applicative m, HashAlgorithm alg, Mtl.MonadState (HMACContext alg) m)
-
 -- ** default setup
 
 -- | default request configuration
@@ -123,6 +112,12 @@ getApiKey (HeaderKey k) = fmap ApiKey . lookup k . requestHeaders
 authenticate :: HashAlgorithm alg => RequestConfig alg -> Request -> SecretKey -> IO (Either AuthFailure Request)
 authenticate conf req k = runReaderT (runExceptT (checkRequestHmac req k)) conf
 
+-- | signs a request in accordance with the config. mostly for testing.
+signRequest :: HashAlgorithm alg => RequestConfig alg -> Request -> SecretKey -> IO (Either AuthFailure Request)
+signRequest conf req k = runReaderT (runExceptT (addSignatureToRequest req k)) conf
+
+-- * internals
+
 -- | the operation performed by 'authenticate'
 checkRequestHmac :: (MonadIO m, HasReqConf alg m, AuthErrorsM m) => Request -> SecretKey -> m Request
 checkRequestHmac req key = do
@@ -134,10 +129,6 @@ checkRequestHmac req key = do
         | targetSig == actualSig = rerunRequestBody req chunks
         | otherwise = Mtl.throwError HashMismatch
 
--- | signs a request in accordance with the config. mostly for testing.
-signRequest :: HashAlgorithm alg => RequestConfig alg -> Request -> SecretKey -> IO (Either AuthFailure Request)
-signRequest conf req k = runReaderT (runExceptT (addSignatureToRequest req k)) conf
-
 -- | the operation performed by 'signRequest'
 addSignatureToRequest :: (MonadIO m, HasReqConf alg m, AuthErrorsM m) => Request -> SecretKey -> m Request
 addSignatureToRequest req key = do
@@ -146,6 +137,22 @@ addSignatureToRequest req key = do
     let encSig = B64.encode (toBytes genSig)
         r' = addHeader req (hname, encSig)
     rerunRequestBody r' chunks
+
+-- ** constraint aliases
+
+-- | a constraint alias for functions that need to access request
+-- configuration
+type HasReqConf alg m = (HashAlgorithm alg, Mtl.MonadReader (RequestConfig alg) m, Functor m)
+
+-- | a constrain alias for functions that can fail
+type AuthErrorsM m = (Mtl.MonadError AuthFailure m)
+
+-- | a constraint alias for functions that save chunks of the request body
+type WriteChunks m = (Mtl.MonadWriter (S.Seq BS.ByteString) m)
+
+-- | a constrain alias for functions that perform incremental updates to
+-- the hash value
+type HmacState alg m = (Functor m, Applicative m, HashAlgorithm alg, Mtl.MonadState (HMACContext alg) m)
 
 -- ** manipulate the request 
 
@@ -253,7 +260,7 @@ getHeader :: (AuthErrorsM m, HasReqConf alg m) => (RequestConfig alg -> HeaderNa
 getHeader targetHeader err req = Mtl.reader targetHeader >>= \header ->
     maybe (Mtl.throwError (err header)) return $ lookup header (requestHeaders req)
 
--- * generic utilities
+-- ** utility functions
 
 -- | return the value if the predicate of it is true
 justWhen :: (a -> Bool) -> a -> Maybe a
